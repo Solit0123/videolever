@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lever Reveal</title>
+  <style>
+    :root { color-scheme: dark; }
+    body{
+      margin:0; min-height:100vh; display:grid; place-items:center;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background: radial-gradient(circle at 30% 20%, #1b2a4a, #070a12 60%);
+      overflow:hidden;
+    }
+    .card{
+      width:min(920px,92vw);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      box-shadow: 0 18px 60px rgba(0,0,0,0.45);
+      padding: 18px;
+      backdrop-filter: blur(10px);
+    }
+    .header{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+    h1{margin:0;font-size:18px;font-weight:700;}
+    .sub{margin:6px 0 0;opacity:.75;font-size:13px;}
+
+    .videoWrap{
+      margin-top:14px;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,0.12);
+      background:#000;
+      aspect-ratio:16/9;
+      position:relative;
+    }
+    video{width:100%;height:100%;object-fit:cover;display:block;}
+
+    .controls{margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+    button{
+      appearance:none;border:0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.10));
+      color:#fff;padding:12px 14px;border-radius:12px;font-weight:700;cursor:pointer;
+      border:1px solid rgba(255,255,255,0.14);
+    }
+    button.primary{
+      background: linear-gradient(180deg, rgba(255,180,0,0.95), rgba(255,120,0,0.95));
+      border: 1px solid rgba(255,160,0,0.65);
+      color:#120800;
+    }
+    button:disabled{opacity:.55;cursor:not-allowed;}
+    .status{margin-left:auto;opacity:.75;font-size:13px;}
+
+    /* No-click effects overlay */
+    .fxOverlay{
+      position:fixed; inset:0;
+      pointer-events:none; /* doesn't block taps/clicks */
+      z-index:9999;
+    }
+
+    .reveal{
+      margin-top:14px;
+      padding:14px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.25);
+      display:none;
+    }
+    .reveal strong{font-size:18px;}
+    .reveal .small{opacity:.8;font-size:13px;margin-top:6px;}
+  </style>
+</head>
+<body>
+  <div class="fxOverlay" id="fxOverlay"></div>
+
+  <div class="card">
+    <div class="header">
+      <div>
+        <h1>Pull to reveal</h1>
+        <p class="sub">Tap the button to play the animation.</p>
+      </div>
+      <div class="status" id="status">Ready</div>
+    </div>
+
+    <div class="videoWrap">
+      <video
+        id="vid"
+        playsinline
+        preload="metadata"
+        controlslist="nodownload noplaybackrate"
+      >
+        <source id="src" type="video/mp4" />
+        Sorry, your browser can’t play this video.
+      </video>
+    </div>
+
+    <div class="controls">
+      <button class="primary" id="btnPlay">Pull lever</button>
+      <button id="btnReplay" disabled>Replay</button>
+      <button id="btnSound">Sound: Off</button>
+      <div class="status" id="time"></div>
+    </div>
+
+    <div class="reveal" id="reveal">
+      <strong>Unlocked 🎉</strong>
+      <div class="small">Show this screen at the promo booth to claim.</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+  <script>
+    // Your signed S3 URL (note: it expires based on X-Amz-Expires)
+    const VIDEO_URL =
+      "https://gtc-dev-media-dump.s3.us-west-2.amazonaws.com/33500782-preview.mp4?response-content-disposition=inline&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEOP%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLXdlc3QtMiJHMEUCIBmusEZ1fqbTnYBjapjvXJk6fUKAyImGwOdINYRI93v5AiEAubxvO26J6iNZQa0ggepbMV73I%2F%2BJ6xxDSmPv9pOiA6sq7AQIrP%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARAEGgw3ODg0NTM4NDg2NDkiDNY7nnRNwGwca6jJ%2FSrABOMfoIV3S7BtIFy9XH1e5YOTqFFys6YmMwHK73g2m0e5c2pMmq0sZYhycx8mYDDsq7ijwnFAahV4GCB1MOCSnX2W4BimVzEfGNl6LQvYXQtZBFM4PJID9Ul9EfdbSreKJGblzlD9vphGwGWxGQ7AKj0ZYbDs64ep%2B333zA6DZ2ttoIrh5Xh%2FTX3ewEGs8VJlf0AU4LGDEjIqxxdWhPOcQiSj59hIVgU0NWeuIH3kjH1QI7rcPfTRsWJhQzHHIWJeulbAH0kng6aClrdWgeFOoE0msaJNmuquJH56BvCrdwScow8F0Hr5Q%2F0jbIRWXxZM%2BM3gw502ixWzp2nLDJHgpnPXUrWHaVPm8%2FE9cFbDmr2hsNEBIFuysjA3jlDG%2FJTLYeTMr7tOgBxJb7rsPXjin3mgbwoO6hUVONS0Cpzknhul903fvKnJReJK8%2BQDo%2Fk6gUFK5lfMO1i%2BlNNcEGiliaZkf0CJ9GJFTN%2Fvz%2BSDWjLERFIPiYkpRSMxQqVeTpK%2F%2BKZU7M1BdgLhyj7HhWFNVonaEb%2FZxtu6vhXM3tJS9OhCSzfIEY4nlGmUNOSPtKoeQ1QKjmwIYNqodEqqkG%2FmE7e4yGh5F%2FLcw5W1s88KCY%2FpGrhu2gClcgcOx5r98GLNXCvWeDMhI207LTBIfU%2BbvvsHvVcXdJf22U3ITCIvRfJ7Fe9PjQ9tQCPlPHLD3sNv6%2FobpePorHCDWiLMzpuvDMlVz1gxuDsaJ9rIyWI6WnSL0DHjnfQYOT5HsDP11N8kNjCEo4XLBjrDAs2dJSztJl8e0t53OWjewu8sjTKThFl7ly44VH%2Bb7ropARqzy66kFk9UcqJoXEXibEoM2AgPVOxuaL6ZJgYm8uznGPr0eCXRcFLByDC2Ydpq3631TA9IbZeN0iYYXK4N7OQ0DjF0qHMQj0rZz4NyzscAMcDUuASVLOzEGQWoLUuYdEWruNVrkawiQJgjWexMHZiEISIijvYApA5scBxUk5HA719lDedKS2juHbghHBHKVSPBb4c%2BTEtqdMPECLlboXgApzZChjOsGAgBEee16wWxowAbSJlm1ezWCXUnD4xg%2FRtxBtTiXDkbmfs4R25WL%2BQ6%2BHbhjmXXPBRsLkMU565nbpVXMDDFn5%2Bg8j5PxDAZ0VBkIVdhTziuTz8SJWrVsFfiH%2FyIiRnHW4n3Uh9iFQp1RtZDveCaq%2BtPmTJocEfhngLS&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIA3PE4C6ZE3N4LJQJC%2F20260109%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20260109T190708Z&X-Amz-Expires=43200&X-Amz-SignedHeaders=host&X-Amz-Signature=5ec6ffe7b9ef9e0a437490b1133b3380fc5613bad63d706018ce19202a28df57";
+
+    const vid = document.getElementById("vid");
+    const src = document.getElementById("src");
+    const btnPlay = document.getElementById("btnPlay");
+    const btnReplay = document.getElementById("btnReplay");
+    const btnSound = document.getElementById("btnSound");
+    const statusEl = document.getElementById("status");
+    const timeEl = document.getElementById("time");
+    const reveal = document.getElementById("reveal");
+
+    src.src = VIDEO_URL;
+    vid.load();
+
+    // Start muted; user can enable sound
+    vid.muted = true;
+    vid.controls = false;
+
+    function setStatus(msg){ statusEl.textContent = msg; }
+    function fmt(s){
+      const m = Math.floor(s/60), ss = Math.floor(s%60);
+      return `${m}:${String(ss).padStart(2,"0")}`;
+    }
+    function updateTime(){
+      if(!isFinite(vid.duration)) return;
+      timeEl.textContent = `${fmt(vid.currentTime)} / ${fmt(vid.duration)}`;
+    }
+
+    function blastConfetti(durationMs=3200){
+      const end = Date.now() + durationMs;
+      (function frame(){
+        confetti({
+          particleCount: 4,
+          spread: 70,
+          startVelocity: 45,
+          ticks: 180,
+          origin: { x: Math.random(), y: Math.random()*0.4 }
+        });
+        if(Date.now() < end) requestAnimationFrame(frame);
+      })();
+    }
+
+    async function playFromStart(){
+      reveal.style.display = "none";
+      btnPlay.disabled = true;
+      btnReplay.disabled = true;
+      setStatus("Playing…");
+
+      try { vid.currentTime = 0; } catch(e){}
+
+      try {
+        await vid.play();
+      } catch (e) {
+        // Most common cause: browser blocked play; user can tap again
+        setStatus("Tap again to play");
+        btnPlay.disabled = false;
+      }
+    }
+
+    btnPlay.addEventListener("click", playFromStart);
+    btnReplay.addEventListener("click", playFromStart);
+
+    btnSound.addEventListener("click", () => {
+      vid.muted = !vid.muted;
+      btnSound.textContent = `Sound: ${vid.muted ? "Off" : "On"}`;
+    });
+
+    vid.addEventListener("loadedmetadata", updateTime);
+    vid.addEventListener("timeupdate", updateTime);
+
+    vid.addEventListener("play", () => setStatus("Playing…"));
+    vid.addEventListener("pause", () => { if(!vid.ended) setStatus("Paused"); });
+
+    vid.addEventListener("ended", () => {
+      setStatus("Complete");
+      btnReplay.disabled = false;
+      btnPlay.disabled = false;
+
+      reveal.style.display = "block";
+      blastConfetti(3200);
+    });
+
+    // Optional: keep it “app-like” on mobile
+    document.addEventListener("contextmenu", (e) => e.preventDefault(), { passive:false });
+  </script>
+</body>
+</html>
